@@ -11,7 +11,6 @@
 ; > Synchronises to VBLANK
 
 ; RESET:
-
 	SEI		; Set CPU to ignore all attempts to pull down the IRQ line.
 	CLD		; Unset decimal mode register - the NES doesn't use decimal mode.
 	

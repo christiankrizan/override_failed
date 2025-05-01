@@ -12,14 +12,13 @@
 	.byte $00, $00, $00, $00, $00, $00, $00, $00, $00 ; Currently unused bytes
 
 .segment "ZEROPAGE"
-	; First of eight pages of 256 B of memory in the NES.
-	; The first page is for variables to be used in the program.
-VAR:	.RES	1	; Reserves 1 B of memory in the zero page for this variable
-
-SpriteYPos:   .res 1
-SpriteTile:   .res 1
-SpriteAttrib: .res 1
-SpriteXPos:   .res 1
+; First of eight pages of 256 B of memory in the NES.
+; The first page is for variables to be used in the program.
+SpriteYPos:   	.res 1
+SpriteTile:   	.res 1
+SpriteAttrib: 	.res 1
+SpriteXPos:   	.res 1
+Controller1:	.res 1
 
 .segment "STARTUP"
 RESET:
@@ -39,6 +38,7 @@ RESET:
 	STA $2006
 	
 	LDX #$00
+
 LOADPALETTES:
 	; Note: read/write to $2007 → PPU steps 1 step forward in memory.
 	LDA PALETTEDATA, X
@@ -113,86 +113,32 @@ LOADSPRITES:
 	
 	LDA #%00011110	; Show sprites and background
 	STA $2001
-	
-	
-INFLOOP:
 
-	:	
-	; Wait for VBLANK -- we are waiting for the next screen to be drawn.
-	BIT $2002 ; Wait for first bit of PPU register $2002 to be 1.
-	BPL :-
 	
-	; Move sprite to the right
-	LDA SpriteXPos
-	CLC
-	ADC #$01        ; Increase X by 1
-	STA SpriteXPos
 	
-	; Now copy sprite data into OAM (via DMA, usually)
-	; That is, build the sprite structure dynamically.
-	LDA SpriteYPos
-	STA $0200       ; 1st sprite, Y position
-	LDA SpriteTile
-	STA $0201       ; 1st sprite, tile #
-	LDA SpriteAttrib
-	STA $0202       ; 1st sprite, attributes
-	LDA SpriteXPos
-	STA $0203       ; 1st sprite, X position
-	
-	; Top-right sprite (X + 8, same Y)
-    LDA SpriteYPos
-    STA $0204       ; Top-right sprite Y (same row)
-    LDA SpriteTile
-    CLC
-    ADC #$01        ; Next tile
-    STA $0205
-    LDA SpriteAttrib
-    STA $0206
-    LDA SpriteXPos
-    CLC
-    ADC #$08        ; Move right 8 pixels
-    STA $0207
-
-	; Bottom-left sprite (Y + 8)
-    LDA SpriteYPos
-    CLC
-    ADC #$08        ; Move down 8 pixels
-    STA $0208       ; Bottom-left sprite Y
-    LDA SpriteTile
-    CLC
-    ADC #$02        ; Next tile
-    STA $0209
-    LDA SpriteAttrib
-    STA $020A
-    LDA SpriteXPos
-    STA $020B
-	
-	; Bottom-right sprite (Y + 8, X + 8)
-    LDA SpriteYPos
-    CLC
-    ADC #$08        ; Move down 8 pixels
-    STA $020C       ; Bottom-right sprite Y
-    LDA SpriteTile
-    CLC
-    ADC #$03        ; Next tile
-    STA $020D
-    LDA SpriteAttrib
-    STA $020E
-    LDA SpriteXPos
-    CLC
-    ADC #$08        ; Move right 8 pixels
-    STA $020F
-	
-	; Start OAM DMA transfer
-	LDA #$02        ; High byte of $0200
-	STA $4014       ; Start DMA transfer
-	
+INFLOOP:	
 	JMP INFLOOP
 
 NMI:
-	LDA #$02
-	STA $4014
-	RTI
+	; This happens in the VBLANK period.
+	
+	; The NMI segment should look more like this:
+	; MAINLOOP: (this is the NMI (draw the screen))
+	;	LDA #$00	; Load 1 byte of 0 in A
+	;	STA $2003	; Set low byte (00) of the RAM address
+		LDA #$02	; Load 1 byte of $02
+		STA $4014	; Set high byte (02) of the RAM address, start the transfer
+	
+	; Draw game
+	;JSR Draw
+	
+	; Update game
+	JSR UPDATE
+	
+	RTI		; Return from interrupt.
+
+UPDATE:
+	.include "update.s"
 
 PALETTEDATA:
 	.byte $00, $0F, $00, $10, 	$00, $0A, $15, $01, 	$00, $29, $28, $27, 	$00, $34, $24, $14 	; Background palettes
@@ -209,11 +155,6 @@ SPRITEDATA:
 	.byte $48, $10, $00, $40
 	.byte $48, $11, $00, $48
 	
-	;.byte SpriteYPos,   SpriteTile,   SpriteAttrib, SpriteXPos
-	;.byte SpriteYPos,   SpriteTile+1, SpriteAttrib, SpriteXPos+8
-	;.byte SpriteYPos+8, SpriteTile+2, SpriteAttrib, SpriteXPos
-	;.byte SpriteYPos+8, SpriteTile+3, SpriteAttrib, SpriteXPos+8
-	
 	; Object-handle-thingy.
 	.byte $50, $08, %00000001, $80
 	.byte $50, $08, %01000001, $88
@@ -227,7 +168,7 @@ SPRITEDATA:
 
 .segment "VECTORS"
 	; Used to define the behaviour of interupts. Three types may be defined.
-	.word NMI ; Non-maskable interrupt
+	.word NMI   ; Non-maskable interrupt
 	.word RESET ; What happens after the reset button is pressed?
 	; Specialised hardware interrupts would go here.
 .segment "CHARS"
